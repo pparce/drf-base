@@ -1,0 +1,19 @@
+### Django ###
+*.log
+*.pot
+*.pyc
+__pycache__/
+local_settings.py
+
+.env
+db.sqlite3
+datos.db
+
+assets/*
+static/*
+media/*
+logs/*
+*.zip
+gunicorn_start.sh
+apps/core/migrations/
+.codegpt
