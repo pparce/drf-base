@@ -25,6 +25,7 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
+    "corsheaders",
     "rest_framework",
     "drf_spectacular",
     "drf_spectacular_sidecar",
@@ -50,6 +51,7 @@ REST_FRAMEWORK = {
 
 # Middleware
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -62,17 +64,23 @@ MIDDLEWARE = [
 
 
 # CORS Configuration
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:4200", 
-    "https://tranquera.devbout.com",
-    ]
-CORS_ORIGIN_WHITELIST = [
-    "http://127.0.0.1:4200",
-    "http://localhost:8080",
-    "https://tranquera.devbout.com/"
-]
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
+CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='').split(',')
+CSRF_TRUSTED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='').split(',')
 CORS_URLS_REGEX = r"^/api/.*$"
-CORS_ALLOW_HEADERS = ("id",)
+CORS_ALLOWED_HEADERS = [
+    'content-type',
+    'authorization',
+    'x-csrftoken',
+    'accept',
+    'accept-encoding',
+    'origin',
+    'user-agent',
+    'dnt',
+    'cache-control',
+    'x-requested-with',
+]
+CORS_ALLOW_CREDENTIALS = True
 
 # JWT Configuration
 SIMPLE_JWT = {

@@ -1,4 +1,3 @@
-from django_filters.rest_framework import DjangoFilterBackend
 from src.apps.user.serializers import UserSerializer, UserEditSerializer
 from django.db import transaction
 from rest_framework import viewsets, status
@@ -8,12 +7,12 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from src.api.utils import generar_codigo
 from src.apps.user.models import User
+from src.shared.views.base_view import BaseModelViewSet
 
 
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(BaseModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    filter_backends = [DjangoFilterBackend]
 
     def create(self, request):
         try:
