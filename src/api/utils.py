@@ -1,23 +1,19 @@
+import secrets
 from datetime import datetime
 from rest_framework import serializers
 from django.core.files.base import ContentFile
 import base64
-import random
 
 
 def convert_date_to_save(date):
-    if date != None:
-        # type: ignore
+    if date is not None:
         return datetime.strptime(date, "%d/%m/%Y, %H:%M:%S")
-    else:
-        return None
+    return None
 
 
-def generar_codigo():
-    codigo = ""
-    for i in range(4):
-        codigo += str(random.randint(0, 9))
-    return codigo
+def generate_code():
+    """Generate a cryptographically secure 6-digit reset code."""
+    return str(secrets.randbelow(900000) + 100000)
 
 
 def calculate_remaining_time_in_seconds(start_date, end_date):
@@ -26,33 +22,30 @@ def calculate_remaining_time_in_seconds(start_date, end_date):
 
 
 def get_client_ip(request):
-    x_forwarded_for = request.META.get(
-        'HTTP_X_FORWARDED_FOR')
+    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[-1].strip()
+        ip = x_forwarded_for.split(",")[-1].strip()
     else:
-        ip = request.META.get('REMOTE_ADDR')
+        ip = request.META.get("REMOTE_ADDR")
     return ip
 
 
 def convert_from_base64_to_file(image, name):
-    format, imgstr = image.split(';base64,')  # type: ignore
-    if format != None:
-        ext = format.split('/')[-1]
-        data = ContentFile(base64.b64decode(imgstr), name=name + '.' + ext)
+    format, imgstr = image.split(";base64,")
+    if format is not None:
+        ext = format.split("/")[-1]
+        data = ContentFile(base64.b64decode(imgstr), name=name + "." + ext)
         return data
 
 
 class DynamicFieldsModelSerializer(serializers.ModelSerializer):
-
     def __init__(self, *args, **kwargs):
-        super(DynamicFieldsModelSerializer, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
-        if self.context.get('request', None):
-            fields = self.context['request'].query_params.get('fields', None)
+        if self.context.get("request", None):
+            fields = self.context["request"].query_params.get("fields", None)
             if fields:
-                fields = fields.replace(" ", "").split(',')
-                # Drop any fields that are not specified in the `fields` argument.
+                fields = fields.replace(" ", "").split(",")
                 allowed = set(fields)
                 existing = set(self.fields.keys())
                 for field_name in existing - allowed:

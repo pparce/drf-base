@@ -1,4 +1,3 @@
-import secrets
 from datetime import timedelta
 from os.path import join, normpath
 from pathlib import Path
@@ -8,11 +7,22 @@ import conf
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config("SECRET_KEY", default="django-insecure-&fr!ma@0lx^_8)sd+mhh&$3ilo3bfkwh!m@88e+)x^lhigjm98")
+SECRET_KEY = config("SECRET_KEY")
 
-DEBUG = config("DEBUG", default=True, cast=bool)
+DEBUG = config("DEBUG", default=False, cast=bool)
 
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*").split(",")
+# Security Headers
+SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = "DENY"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 # Applications
 DJANGO_APPS = [
@@ -32,11 +42,14 @@ THIRD_PARTY_APPS = [
     "django_filters",
     "rest_framework_simplejwt",
     "django_unused_media",
+    "django_celery_results",
+    "django_celery_beat",
 ]
 
 LOCAL_APPS = [
     "src.apps.user",
     "src.apps.core",
+    "src.apps.auth",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -46,6 +59,20 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/day",
+        "user": "1000/day",
+        "auth": "10/minute",
+    },
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
     "DEFAULT_SCHEMA_CLASS": "src.shared.utils.app_auto_schema.AppNameAutoSchema",
 }
 
@@ -62,23 +89,22 @@ MIDDLEWARE = [
     "django.middleware.locale.LocaleMiddleware",
 ]
 
-
 # CORS Configuration
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
-CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='').split(',')
-CSRF_TRUSTED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='').split(',')
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",")
+CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="").split(",")
+CSRF_TRUSTED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="").split(",")
 CORS_URLS_REGEX = r"^/api/.*$"
 CORS_ALLOWED_HEADERS = [
-    'content-type',
-    'authorization',
-    'x-csrftoken',
-    'accept',
-    'accept-encoding',
-    'origin',
-    'user-agent',
-    'dnt',
-    'cache-control',
-    'x-requested-with',
+    "content-type",
+    "authorization",
+    "x-csrftoken",
+    "accept",
+    "accept-encoding",
+    "origin",
+    "user-agent",
+    "dnt",
+    "cache-control",
+    "x-requested-with",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -121,8 +147,9 @@ TEMPLATES = [
     },
 ]
 
-# WSGI Configuration
+# WSGI / ASGI Configuration
 WSGI_APPLICATION = "conf.wsgi.application"
+ASGI_APPLICATION = "conf.asgi.application"
 
 # Database Configuration
 DATABASES = {
@@ -130,7 +157,7 @@ DATABASES = {
         "ENGINE": config("DATABASE_ENGINE", default="django.db.backends.postgresql"),
         "NAME": config("DATABASE_NAME", default="base"),
         "USER": config("DATABASE_USER", default="postgres"),
-        "PASSWORD": config("DATABASE_PASSWORD", default="Telodij3?"),
+        "PASSWORD": config("DATABASE_PASSWORD"),
         "HOST": config("DATABASE_HOST", default="localhost"),
         "PORT": config("DATABASE_PORT", default="5432"),
     }
@@ -138,9 +165,7 @@ DATABASES = {
 
 # Authentication Validators
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
@@ -158,6 +183,8 @@ USE_TZ = True
 
 # Static & Media
 STATIC_URL = "static/"
+STATIC_ROOT = normpath(join(BASE_DIR, "staticfiles"))
+MEDIA_URL = "/media/"
 MEDIA_ROOT = normpath(join(BASE_DIR, "media"))
 
 # Default Primary Key Field Type
@@ -167,28 +194,74 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "user.User"
 
 # Email Configuration
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = config("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
 EMAIL_HOST = config("EMAIL_HOST", default="smtp.mailtrap.io")
 EMAIL_PORT = config("EMAIL_PORT", default="2525")
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
 EMAIL_USE_SSL = config("EMAIL_USE_SSL", default=False, cast=bool)
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@example.com")
 
-# Swagger Settings
-SWAGGER_SETTINGS = {
-    "SECURITY_DEFINITIONS": {"basic": {"type": "basic"}},
-}
+# Celery
+CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default="django-db")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes hard limit per task
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
-# ASGI Configuration
-ASGI_APPLICATION = "conf.asgi.application"
+# Google OAuth
+GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID", default="")
 
+# Swagger / OpenAPI Settings
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Tu Proyecto API",
-    "DESCRIPTION": "Descripción de la API",
+    "TITLE": "DRF Base API",
+    "DESCRIPTION": "Base Django REST Framework API with JWT authentication",
     "VERSION": "1.0.0",
     "OPENAPI_URL": "openapi",
     "OPENAPI_REDOC_URL": "redoc",
     "OPENAPI_SWAGGER_UI_URL": "swagger",
-    # otras configuraciones si es necesario
+    "SERVE_INCLUDE_SCHEMA": False,
+}
+
+SWAGGER_SETTINGS = {
+    "SECURITY_DEFINITIONS": {"Bearer": {"type": "apiKey", "name": "Authorization", "in": "header"}},
+}
+
+# Logging
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": config("DJANGO_LOG_LEVEL", default="INFO"),
+            "propagate": False,
+        },
+        "src": {
+            "handlers": ["console"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+    },
 }
