@@ -1,7 +1,5 @@
 import logging
 
-from django.conf import settings
-from django.core.mail import send_mail
 from django.db import transaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -20,11 +18,14 @@ from src.apps.auth.serializers import (
     RestorePasswordSerializer,
     GoogleLoginSerializer,
 )
+from src.shared.tasks.email_tasks import send_password_reset_email, send_welcome_email
 
 logger = logging.getLogger(__name__)
 
+_RESET_GENERIC_MSG = {"message": "If this email exists, a reset code has been sent"}
 
-def _build_token_response(user, created=False):
+
+def _token_response(user, created=False):
     refresh = RefreshToken.for_user(user)
     data = {
         "token": str(refresh.access_token),
@@ -49,7 +50,7 @@ class AuthViewSet(viewsets.ViewSet):
         user = serializer.validated_data["user"]
         user.restore_code = None
         user.save(update_fields=["restore_code"])
-        return Response(_build_token_response(user))
+        return Response(_token_response(user))
 
     @action(detail=False, methods=["post"])
     def register(self, request):
@@ -71,10 +72,11 @@ class AuthViewSet(viewsets.ViewSet):
                 user.set_password(serializer.validated_data["password"])
                 user.save()
         except Exception:
-            logger.exception("Error during registration")
+            logger.exception("Error during registration for %s", email)
             return Response({"error": "Registration failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response(_build_token_response(user), status=status.HTTP_201_CREATED)
+        send_welcome_email.delay(user.email, user.first_name or "User")
+        return Response(_token_response(user), status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["post"])
     def sending_restore_code(self, request):
@@ -82,37 +84,16 @@ class AuthViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"]
 
-        _GENERIC_MSG = {"message": "If this email exists, a reset code has been sent"}
-
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            return Response(_GENERIC_MSG, status=status.HTTP_200_OK)
+            return Response(_RESET_GENERIC_MSG, status=status.HTTP_200_OK)
 
         user.restore_code = generate_code()
         user.save(update_fields=["restore_code"])
 
-        try:
-            send_mail(
-                subject="Password Reset Code",
-                message=f"Your password reset code is: {user.restore_code}",
-                from_email=settings.EMAIL_HOST_USER or "noreply@example.com",
-                recipient_list=[email],
-                html_message=(
-                    f"<p>Dear {user.first_name or 'User'},</p>"
-                    f"<p>Your password reset code is: <strong>{user.restore_code}</strong></p>"
-                    f"<p>If you did not request a password reset, please ignore this message.</p>"
-                ),
-                fail_silently=False,
-            )
-        except Exception:
-            logger.exception("Failed to send password reset email to %s", email)
-            return Response(
-                {"error": "Failed to send email. Please try again later."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-        return Response(_GENERIC_MSG, status=status.HTTP_200_OK)
+        send_password_reset_email.delay(email, user.first_name or "User", user.restore_code)
+        return Response(_RESET_GENERIC_MSG, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"])
     def restore_password(self, request):
@@ -139,8 +120,8 @@ class AuthViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"])
     def google(self, request):
         """
-        Authenticate with a Google ID token obtained on the client side via Google Sign-In.
-        Creates a new account on first login. Returns JWT tokens.
+        Exchange a Google ID token (from the client-side Sign-In flow) for JWT tokens.
+        Creates a new account on first login.
         """
         serializer = GoogleLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -149,6 +130,7 @@ class AuthViewSet(viewsets.ViewSet):
         try:
             from google.oauth2 import id_token
             from google.auth.transport import requests as google_requests
+            from django.conf import settings
 
             idinfo = id_token.verify_oauth2_token(
                 id_token_value,
@@ -178,9 +160,10 @@ class AuthViewSet(viewsets.ViewSet):
         if created:
             user.set_unusable_password()
             user.save(update_fields=["password"])
+            send_welcome_email.delay(user.email, user.first_name or "User")
 
         if not user.is_active:
             return Response({"error": "This account has been disabled"}, status=status.HTTP_403_FORBIDDEN)
 
         http_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
-        return Response(_build_token_response(user, created=created), status=http_status)
+        return Response(_token_response(user, created=created), status=http_status)
