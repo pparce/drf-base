@@ -4,14 +4,15 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework import routers
 
+from src.apps.auth.views import AuthViewSet
 from src.apps.core.views import ImageViewSet
-from src.apps.user.views import AuthViewSet, UserViewSet
+from src.apps.user.views import UserViewSet
 from src.shared.views.health import health_check
 
 router = routers.SimpleRouter()
+router.register("auth", AuthViewSet, basename="auth")
 router.register("core/image", ImageViewSet, basename="image")
 router.register("users", UserViewSet, basename="user")
-router.register("auth", AuthViewSet, basename="auth")
 
 urlpatterns = [
     path("", RedirectView.as_view(url="docs/")),

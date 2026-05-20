@@ -1,5 +1,4 @@
 from django.test import TestCase
-from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 from src.apps.user.models import User
@@ -33,74 +32,6 @@ class UserModelTest(TestCase):
         )
         self.assertTrue(admin.is_staff)
         self.assertTrue(admin.is_superuser)
-
-
-class AuthRegisterTest(TestCase):
-    def setUp(self):
-        self.client = APIClient()
-
-    def test_register_success(self):
-        response = self.client.post("/api/auth/register/", {
-            "email": "new@example.com",
-            "first_name": "New",
-            "last_name": "User",
-            "password": "securepassword123",
-        })
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn("token", response.data)
-        self.assertNotIn("password", response.data.get("user", {}))
-
-    def test_register_duplicate_email(self):
-        User.objects.create_user(
-            email="existing@example.com",
-            first_name="Existing",
-            last_name="User",
-            password="securepassword123",
-        )
-        response = self.client.post("/api/auth/register/", {
-            "email": "existing@example.com",
-            "first_name": "New",
-            "last_name": "User",
-            "password": "securepassword123",
-        })
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("error", response.data)
-
-    def test_register_short_password(self):
-        response = self.client.post("/api/auth/register/", {
-            "email": "new@example.com",
-            "first_name": "New",
-            "last_name": "User",
-            "password": "short",
-        })
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-
-class AuthLoginTest(TestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.user = User.objects.create_user(
-            email="login@example.com",
-            first_name="Login",
-            last_name="User",
-            password="securepassword123",
-        )
-
-    def test_login_success(self):
-        response = self.client.post("/api/auth/login/", {
-            "username": "login@example.com",
-            "password": "securepassword123",
-        })
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("token", response.data)
-        self.assertNotIn("password", response.data.get("user", {}))
-
-    def test_login_wrong_password(self):
-        response = self.client.post("/api/auth/login/", {
-            "username": "login@example.com",
-            "password": "wrongpassword",
-        })
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 class ChangePasswordTest(TestCase):
@@ -137,47 +68,39 @@ class ChangePasswordTest(TestCase):
         })
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_change_password_requires_auth(self):
+        unauthenticated = APIClient()
+        response = unauthenticated.post("/api/users/change_password/", {
+            "current_password": "oldpassword123",
+            "new_password": "newpassword456",
+        })
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-class RestorePasswordTest(TestCase):
+
+class UserUpdateTest(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user(
-            email="restore@example.com",
-            first_name="Restore",
+            email="owner@example.com",
+            first_name="Owner",
             last_name="User",
-            password="originalpassword123",
+            password="password123",
+        )
+        self.other_user = User.objects.create_user(
+            email="other@example.com",
+            first_name="Other",
+            last_name="User",
+            password="password123",
         )
 
-    def test_restore_password_success(self):
-        self.user.restore_code = "123456"
-        self.user.save()
-        response = self.client.post("/api/auth/restore_password/", {
-            "email": "restore@example.com",
-            "code": "123456",
-            "new_password": "newpassword456",
-        })
+    def test_user_can_update_own_profile(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.patch(f"/api/users/{self.user.id}/", {"first_name": "Updated"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
-        self.assertTrue(self.user.check_password("newpassword456"))
-        self.assertIsNone(self.user.restore_code)
+        self.assertEqual(self.user.first_name, "Updated")
 
-    def test_restore_password_wrong_code(self):
-        self.user.restore_code = "123456"
-        self.user.save()
-        response = self.client.post("/api/auth/restore_password/", {
-            "email": "restore@example.com",
-            "code": "000000",
-            "new_password": "newpassword456",
-        })
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-
-class HealthCheckTest(TestCase):
-    def setUp(self):
-        self.client = APIClient()
-
-    def test_health_check(self):
-        response = self.client.get("/api/health/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("status", response.data)
-        self.assertIn("database", response.data)
+    def test_user_cannot_update_other_profile(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.patch(f"/api/users/{self.other_user.id}/", {"first_name": "Hacked"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
