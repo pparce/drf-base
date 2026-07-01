@@ -1,0 +1,64 @@
+@host = http://localhost:5080
+
+### Health
+GET {{host}}/api/health
+
+### Register
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "firstName": "Ada",
+  "lastName": "Lovelace",
+  "password": "supersecret",
+  "receiveNews": true
+}
+
+### Login
+# @name login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "supersecret"
+}
+
+### Current user
+GET {{host}}/api/users/me
+Authorization: Bearer {{login.response.body.token}}
+
+### Refresh token
+POST {{host}}/api/auth/token/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{login.response.body.tokenRefresh}}"
+}
+
+### Change password
+POST {{host}}/api/users/change_password
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{
+  "currentPassword": "supersecret",
+  "newPassword": "evenmoresecret"
+}
+
+### Request password reset code
+POST {{host}}/api/auth/sending_restore_code
+Content-Type: application/json
+
+{
+  "email": "user@example.com"
+}
+
+### Google sign-in
+POST {{host}}/api/auth/google
+Content-Type: application/json
+
+{
+  "idToken": "GOOGLE_ID_TOKEN_HERE"
+}
