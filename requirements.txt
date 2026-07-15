@@ -1,34 +1,34 @@
 # Web framework
-Django==5.1.4
-djangorestframework==3.15.2
-djangorestframework-simplejwt==5.3.1
+Django
+djangorestframework
+djangorestframework-simplejwt
 
 # Database
-psycopg2-binary==2.9.9
+psycopg2-binary
 
 # Async tasks & broker
-celery[redis]==5.4.0
-redis==5.0.8
-django-celery-results==2.5.1
-django-celery-beat==2.6.0
+celery[redis]
+redis
+django-celery-results
+django-celery-beat
 
 # API utilities
-django-filter==24.3
-django-cors-headers==4.4.0
-drf-spectacular==0.27.2
-drf-spectacular-sidecar==2024.7.1
+django-filter
+django-cors-headers
+drf-spectacular
+drf-spectacular-sidecar
 
 # Auth
-google-auth==2.35.0
+google-auth
 
 # Serving
-gunicorn==23.0.0
-daphne==4.1.2
+gunicorn
+daphne
 
 # Storage & media
-Pillow==11.0.0
-django-unused-media==0.2.2
+Pillow
+django-unused-media
 
 # Config & utils
-python-decouple==3.8
-markdown==3.7
+python-decouple
+markdown
